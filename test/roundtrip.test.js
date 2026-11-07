@@ -20,7 +20,8 @@ test("learns repeated structures and encodes changed values as deltas", () => {
   const { model, encoded, restored } = roundTrip(refs, input);
 
   assert.ok(model.templates.length > 0);
-  assert.equal(encoded.nodes[0][0], "e");
+  assert.equal(encoded.nodes[0][0], "r");
+  assert.ok(encoded.nodes[0][2].length > 0);
   assert.match(restored, /id="three"/);
   assert.match(restored, /Gamma/);
   assert.match(restored, />30</);
