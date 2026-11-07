@@ -64,3 +64,16 @@ test("keeps whitespace text nodes and document-level order", () => {
   assert.equal(parsed.children[1].type, "comment");
   assert.equal(parsed.children[2].children[0].value, "  ");
 });
+
+test("uses learned templates below an unknown wrapper", () => {
+  const refs = [
+    '<ref><known a="1"><value>one</value></known></ref>',
+    '<ref><known a="2"><value>two</value></known></ref>'
+  ];
+  const input = '<new-wrapper><known a="3"><value>three</value></known><future/></new-wrapper>';
+  const { encoded, restored } = roundTrip(refs, input);
+  assert.equal(encoded.nodes[0][0], "e");
+  assert.equal(encoded.nodes[0][3][0][0], "r");
+  assert.match(restored, /<future\/>/);
+  assert.match(restored, />three</);
+});
