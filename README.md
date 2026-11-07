@@ -32,3 +32,25 @@ npm test
 ## Design
 
 See [docs/design.md](docs/design.md) for the initial format and implementation notes.
+
+## API preview
+
+```js
+import {
+  generateModelFromXml,
+  encodeXml,
+  decodeXml
+} from "xml-reference-compressor";
+
+const referenceXml = [referenceA, referenceB, referenceC];
+const model = generateModelFromXml(referenceXml);
+
+const encodedObject = encodeXml(inputXml, model);
+const compactJson = JSON.stringify(encodedObject);
+
+const restoredXml = decodeXml(JSON.parse(compactJson), model);
+```
+
+The model must be distributed or stored separately and must be identical on both sides. The encoded document contains the model fingerprint so mismatched models are rejected.
+
+This initial implementation is a prototype. It preserves the XML information represented by the parser tree, but does not promise byte-identical output. In particular, entity spelling, attribute quoting, line endings, and empty-element formatting may change during serialization.
