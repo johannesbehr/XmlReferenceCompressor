@@ -1,0 +1,11 @@
+{
+  "name": "xml-reference-compressor",
+  "version": "0.1.0",
+  "description": "Lossless XML structure compression using shared reference models",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "scripts": { "test": "node --test", "example": "node examples/basic.js" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "saxes": "^6.0.0" }
+}
