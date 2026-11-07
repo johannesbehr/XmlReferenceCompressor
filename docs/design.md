@@ -47,3 +47,7 @@ The goal is semantic XML preservation, not byte-for-byte reproduction. XML parse
 - Add a binary container and gzip/brotli comparisons.
 - Add streaming and resource limits for untrusted input.
 - Expand tests for namespaces, DTDs, XML declarations, and edge cases.
+
+## Current parser limitations
+
+The first parser adapter uses the `saxes` package. It handles ordinary XML documents and preserves the document node types represented by the internal tree. External entity resolution and full DTD processing are not implemented as a feature of this compressor. Inputs relying on custom DTD-defined entities should be treated as unsupported until dedicated tests and a safe entity policy are added.
