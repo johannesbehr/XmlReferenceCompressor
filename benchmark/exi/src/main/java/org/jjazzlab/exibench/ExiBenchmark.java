@@ -5,9 +5,11 @@ import com.siemens.ct.exi.core.EncodingOptions;
 import com.siemens.ct.exi.core.EXIFactory;
 import com.siemens.ct.exi.core.FidelityOptions;
 import com.siemens.ct.exi.core.helpers.DefaultEXIFactory;
+import com.siemens.ct.exi.grammars.GrammarFactory;
 import com.siemens.ct.exi.main.api.sax.EXIResult;
 import com.siemens.ct.exi.main.api.sax.EXISource;
-import com.siemens.ct.exi.grammars.GrammarFactory;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
 import org.xml.sax.InputSource;
 import org.xml.sax.XMLReader;
 import org.xml.sax.helpers.XMLReaderFactory;
@@ -30,24 +32,30 @@ import java.util.TreeMap;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import org.w3c.dom.NamedNodeMap;
-import org.w3c.dom.Node;
 
-/** Runs schema-less and, optionally, schema-informed EXI encodings against .sng files in a ZIP archive. */
+/** Benchmarks schema-less EXI and optional schema-informed EXI for .sng files. */
 public final class ExiBenchmark {
     private ExiBenchmark() {}
 
     private record ResultRow(String name, int originalBytes, int gzipBytes,
             int bitPackedBytes, long bitPackedEncodeMs, long bitPackedDecodeMs, boolean bitPackedRoundTrip,
-            int compressionBytes, long compressionEncodeMs, long compressionDecodeMs, boolean compressionRoundTrip,\n            int schemaCompressionBytes, long schemaCompressionEncodeMs, long schemaCompressionDecodeMs, boolean schemaCompressionRoundTrip) {}
+            int compressionBytes, long compressionEncodeMs, long compressionDecodeMs, boolean compressionRoundTrip,
+            int schemaCompressionBytes, long schemaCompressionEncodeMs, long schemaCompressionDecodeMs,
+            boolean schemaCompressionRoundTrip) {}
+
+    private record ModeResult(byte[] encoded, long encodeMs, long decodeMs, boolean roundTrip) {}
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 1 || args.length > 2) {
-            System.err.println("Usage: ExiBenchmark <songs.zip> [output-directory]");
+        if (args.length < 1 || args.length > 3) {
+            System.err.println("Usage: ExiBenchmark <songs.zip> [output-directory] [schema.xsd]");
             System.exit(2);
         }
         Path zipPath = Path.of(args[0]);
-        Path outputDir = args.length == 2 ? Path.of(args[1]) : Path.of("exi-results");
+        Path outputDir = args.length >= 2 ? Path.of(args[1]) : Path.of("exi-results");
+        Path schemaPath = args.length >= 3 ? Path.of(args[2]).toAbsolutePath() : null;
+        if (schemaPath != null && !Files.isRegularFile(schemaPath)) {
+            throw new IllegalArgumentException("XSD not found: " + schemaPath);
+        }
         Files.createDirectories(outputDir);
 
         List<ResultRow> rows = new ArrayList<>();
@@ -60,13 +68,15 @@ public final class ExiBenchmark {
                 ResultRow row = benchmarkOne(name, xml, outputDir, schemaPath);
                 rows.add(row);
                 System.out.printf(Locale.ROOT,
-                        "%-28s XML %,8d | GZIP %,6d | EXI bit %,6d | EXI compression %,6d%n",
+                        "%-28s XML %,8d | GZIP %,6d | EXI bit %,6d | EXI compression %,6d",
                         name, row.originalBytes(), row.gzipBytes(), row.bitPackedBytes(), row.compressionBytes());
+                if (schemaPath != null) System.out.printf(Locale.ROOT, " | EXI schema+compression %,6d", row.schemaCompressionBytes());
+                System.out.println();
             }
         }
         if (rows.isEmpty()) throw new IllegalArgumentException("The ZIP archive contains no .sng files: " + zipPath);
         writeCsv(rows, outputDir.resolve("results.csv"));
-        printSummary(rows);
+        printSummary(rows, schemaPath != null);
         System.out.println();
         System.out.println("CSV report: " + outputDir.resolve("results.csv").toAbsolutePath());
         System.out.println("EXI files:  " + outputDir.toAbsolutePath());
@@ -74,24 +84,34 @@ public final class ExiBenchmark {
 
     private static ResultRow benchmarkOne(String name, byte[] xml, Path outputDir, Path schemaPath) throws Exception {
         int gzipBytes = gzip(xml).length;
-        ModeResult bitPacked = encodeDecode(xml, CodingMode.BIT_PACKED);
-        ModeResult compression = encodeDecode(xml, CodingMode.COMPRESSION, null);\n        ModeResult schemaCompression = schemaPath == null ? null : encodeDecode(xml, CodingMode.COMPRESSION, schemaPath);
+        ModeResult bitPacked = encodeDecode(xml, CodingMode.BIT_PACKED, null);
+        ModeResult compression = encodeDecode(xml, CodingMode.COMPRESSION, null);
+        ModeResult schemaCompression = schemaPath == null ? null : encodeDecode(xml, CodingMode.COMPRESSION, schemaPath);
+
         String safeName = name.replaceAll("[^A-Za-z0-9._-]", "_");
         Files.write(outputDir.resolve(safeName + ".bit-packed.exi"), bitPacked.encoded());
-        Files.write(outputDir.resolve(safeName + ".compression.exi"), compression.encoded());\n        if (schemaCompression != null) Files.write(outputDir.resolve(safeName + ".schema-compression.exi"), schemaCompression.encoded());
+        Files.write(outputDir.resolve(safeName + ".compression.exi"), compression.encoded());
+        if (schemaCompression != null) {
+            Files.write(outputDir.resolve(safeName + ".schema-compression.exi"), schemaCompression.encoded());
+        }
+
         return new ResultRow(name, xml.length, gzipBytes,
                 bitPacked.encoded().length, bitPacked.encodeMs(), bitPacked.decodeMs(), bitPacked.roundTrip(),
-                compression.encoded().length, compression.encodeMs(), compression.decodeMs(), compression.roundTrip(),\n                schemaCompression == null ? 0 : schemaCompression.encoded().length,\n                schemaCompression == null ? 0 : schemaCompression.encodeMs(),\n                schemaCompression == null ? 0 : schemaCompression.decodeMs(),\n                schemaCompression != null && schemaCompression.roundTrip());
+                compression.encoded().length, compression.encodeMs(), compression.decodeMs(), compression.roundTrip(),
+                schemaCompression == null ? 0 : schemaCompression.encoded().length,
+                schemaCompression == null ? 0 : schemaCompression.encodeMs(),
+                schemaCompression == null ? 0 : schemaCompression.decodeMs(),
+                schemaCompression != null && schemaCompression.roundTrip());
     }
 
-    private record ModeResult(byte[] encoded, long encodeMs, long decodeMs, boolean roundTrip) {}
-
-    private static ModeResult encodeDecode(byte[] xml, CodingMode mode) throws Exception {
+    private static ModeResult encodeDecode(byte[] xml, CodingMode mode, Path schemaPath) throws Exception {
         EXIFactory factory = DefaultEXIFactory.newInstance();
         factory.setCodingMode(mode);
+        if (schemaPath != null) {
+            factory.setGrammars(GrammarFactory.newInstance().createGrammars(schemaPath.toString()));
+        }
 
-        // Preserve relevant XML information even though the current six files
-        // do not contain comments, PIs, DTDs or namespace prefixes.
+        // Preserve XML information, matching the schema-less benchmark configuration.
         FidelityOptions fidelity = factory.getFidelityOptions();
         fidelity.setFidelity(FidelityOptions.FEATURE_COMMENT, true);
         fidelity.setFidelity(FidelityOptions.FEATURE_PI, true);
@@ -119,8 +139,8 @@ public final class ExiBenchmark {
 
         Node originalDom = parseXml(xml);
         Node decodedDom = decodedResult.getNode();
-        String mismatch = compareNodes(originalDom, decodedDom, "/");
-        return new ModeResult(encoded, encodeMs, decodeMs, mismatch == null);
+        return new ModeResult(encoded, encodeMs, decodeMs,
+                compareNodes(originalDom, decodedDom, "/") == null);
     }
 
     private static Node parseXml(byte[] xml) throws Exception {
@@ -132,7 +152,6 @@ public final class ExiBenchmark {
         return factory.newDocumentBuilder().parse(new ByteArrayInputStream(xml));
     }
 
-    /** Compare parsed XML trees, ignoring serialization-only details. */
     private static String compareNodes(Node a, Node b, String path) {
         if (a == null || b == null) return a == b ? null : path + " missing node";
         if (a.getNodeType() != b.getNodeType()) return path + " node type differs";
@@ -155,8 +174,7 @@ public final class ExiBenchmark {
             childB = childB.getNextSibling();
             index++;
         }
-        if (childA != null || childB != null) return path + " child count differs";
-        return null;
+        return childA != null || childB != null ? path + " child count differs" : null;
     }
 
     private static Map<String, String> attributes(NamedNodeMap map) {
@@ -184,7 +202,7 @@ public final class ExiBenchmark {
 
     private static void writeCsv(List<ResultRow> rows, Path output) throws IOException {
         StringBuilder csv = new StringBuilder();
-        csv.append("file,original_bytes,gzip_bytes,exi_bit_packed_bytes,bit_packed_encode_ms,bit_packed_decode_ms,bit_packed_roundtrip,exi_compression_bytes,compression_encode_ms,compression_decode_ms,compression_roundtrip\n");
+        csv.append("file,original_bytes,gzip_bytes,exi_bit_packed_bytes,bit_packed_encode_ms,bit_packed_decode_ms,bit_packed_roundtrip,exi_compression_bytes,compression_encode_ms,compression_decode_ms,compression_roundtrip,exi_schema_compression_bytes,schema_compression_encode_ms,schema_compression_decode_ms,schema_compression_roundtrip\n");
         for (ResultRow r : rows) {
             csv.append(csv(r.name())).append(',')
                     .append(r.originalBytes()).append(',')
@@ -196,25 +214,38 @@ public final class ExiBenchmark {
                     .append(r.compressionBytes()).append(',')
                     .append(r.compressionEncodeMs()).append(',')
                     .append(r.compressionDecodeMs()).append(',')
-                    .append(r.compressionRoundTrip()).append('\n');
+                    .append(r.compressionRoundTrip()).append(',')
+                    .append(r.schemaCompressionBytes()).append(',')
+                    .append(r.schemaCompressionEncodeMs()).append(',')
+                    .append(r.schemaCompressionDecodeMs()).append(',')
+                    .append(r.schemaCompressionRoundTrip()).append('\n');
         }
         Files.writeString(output, csv, StandardCharsets.UTF_8);
     }
 
-    private static String csv(String value) { return "\"" + value.replace("\"", "\"\"") + "\""; }
+    private static String csv(String value) {
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
 
-    private static void printSummary(List<ResultRow> rows) {
+    private static void printSummary(List<ResultRow> rows, boolean schemaTested) {
         long original = rows.stream().mapToLong(ResultRow::originalBytes).sum();
         long gzip = rows.stream().mapToLong(ResultRow::gzipBytes).sum();
         long bitPacked = rows.stream().mapToLong(ResultRow::bitPackedBytes).sum();
         long compression = rows.stream().mapToLong(ResultRow::compressionBytes).sum();
-        long failed = rows.stream().filter(r -> !r.bitPackedRoundTrip() || !r.compressionRoundTrip()).count();
+        long schemaCompression = rows.stream().mapToLong(ResultRow::schemaCompressionBytes).sum();
+        long failed = rows.stream().filter(r -> !r.bitPackedRoundTrip() || !r.compressionRoundTrip()
+                || (schemaTested && !r.schemaCompressionRoundTrip())).count();
+
         System.out.println();
         System.out.println("TOTALS");
-        System.out.printf(Locale.ROOT, "Original XML:        %,d bytes%n", original);
-        System.out.printf(Locale.ROOT, "GZIP:                %,d bytes (%.2f%% of original)%n", gzip, percent(gzip, original));
-        System.out.printf(Locale.ROOT, "EXI bit-packed:      %,d bytes (%.2f%% of original)%n", bitPacked, percent(bitPacked, original));
-        System.out.printf(Locale.ROOT, "EXI compression:    %,d bytes (%.2f%% of original)%n", compression, percent(compression, original));
+        System.out.printf(Locale.ROOT, "Original XML:         %,d bytes%n", original);
+        System.out.printf(Locale.ROOT, "GZIP:                 %,d bytes (%.2f%% of original)%n", gzip, percent(gzip, original));
+        System.out.printf(Locale.ROOT, "EXI bit-packed:       %,d bytes (%.2f%% of original)%n", bitPacked, percent(bitPacked, original));
+        System.out.printf(Locale.ROOT, "EXI compression:     %,d bytes (%.2f%% of original)%n", compression, percent(compression, original));
+        if (schemaTested) {
+            System.out.printf(Locale.ROOT, "EXI schema+compress: %,d bytes (%.2f%% of original)%n",
+                    schemaCompression, percent(schemaCompression, original));
+        }
         System.out.printf(Locale.ROOT, "Round-trip failures: %d%n", failed);
     }
 
