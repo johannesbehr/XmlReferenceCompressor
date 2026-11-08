@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Initial schema for JJazzLab .sng files.
+
+  This is a deliberately permissive, schema-informed EXI schema, not yet a
+  complete validation schema for every JJazzLab release. The Song envelope
+  follows the public SongImpl serialization proxy. Nested model objects remain
+  open because their XStream serialization varies by model/version and may
+  contain class aliases, references, client properties and extension fields.
+
+  Based on public JJazzLab source and public .sng examples.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="unqualified"
+           attributeFormDefault="unqualified">
+
+  <!--
+    Open recursive node: declare known element names globally so EXI can use
+    schema-informed element grammars, while accepting additional model fields.
+  -->
+  <xs:complexType name="OpenNodeType" mixed="true">
+    <xs:sequence>
+      <xs:any minOccurs="0" maxOccurs="unbounded" processContents="lax"/>
+    </xs:sequence>
+    <xs:anyAttribute processContents="lax"/>
+  </xs:complexType>
+
+  <!-- Song serialization envelope (current and legacy root aliases). -->
+  <xs:complexType name="SongType">
+    <xs:sequence>
+      <xs:element ref="spVERSION" minOccurs="0"/>
+      <xs:element ref="spComments" minOccurs="0"/>
+      <!-- Used by older Song serialization versions (<= 2). -->
+      <xs:element ref="spClientProperties" minOccurs="0"/>
+      <xs:element ref="spTags" minOccurs="0"/>
+      <xs:element ref="spChordLeadSheet"/>
+      <xs:element ref="spSongStructure"/>
+      <!-- Introduced in Song serialization version 2. -->
+      <xs:element ref="spMapUserPhrases" minOccurs="0"/>
+      <!-- Used since Song serialization version 3. -->
+      <xs:element ref="spClientPropertiesV3" minOccurs="0"/>
+    </xs:sequence>
+    <xs:anyAttribute processContents="lax"/>
+  </xs:complexType>
+
+  <xs:element name="Song" type="SongType"/>
+  <xs:element name="org.jjazz.song.api.Song$SerializationProxy" type="SongType"/>
+
+  <!-- Song/model vocabulary observed in public JJazzLab sources and .sng files. -->
+  <xs:element name="spVERSION" type="OpenNodeType"/>
+  <xs:element name="spComments" type="OpenNodeType"/>
+  <xs:element name="spTags" type="OpenNodeType"/>
+  <xs:element name="spChordLeadSheet" type="OpenNodeType"/>
+  <xs:element name="spSongStructure" type="OpenNodeType"/>
+  <xs:element name="spMapUserPhrases" type="OpenNodeType"/>
+  <xs:element name="spClientProperties" type="OpenNodeType"/>
+  <xs:element name="spClientPropertiesV3" type="OpenNodeType"/>
+
+  <xs:element name="spItems" type="OpenNodeType"/>
+  <xs:element name="spSize" type="OpenNodeType"/>
+  <xs:element name="spSpts" type="OpenNodeType"/>
+  <xs:element name="spKeepUpdated" type="OpenNodeType"/>
+  <xs:element name="spParentCls" type="OpenNodeType"/>
+  <xs:element name="spParentSection" type="OpenNodeType"/>
+  <xs:element name="spPos" type="OpenNodeType"/>
+  <xs:element name="spChord" type="OpenNodeType"/>
+  <xs:element name="spRenderingInfo" type="OpenNodeType"/>
+  <xs:element name="spRhythmName" type="OpenNodeType"/>
+  <xs:element name="spHashMapRpIdValue" type="OpenNodeType"/>
+
+  <xs:element name="CLI__ChordSymbolImpl" type="OpenNodeType"/>
+  <xs:element name="CLI__SectionImpl" type="OpenNodeType"/>
+  <xs:element name="SongPartImpl" type="OpenNodeType"/>
+  <xs:element name="ChordRenderingInfoSP" type="OpenNodeType"/>
+
+  <xs:element name="entry" type="OpenNodeType"/>
+  <xs:element name="owner" type="OpenNodeType"/>
+  <xs:element name="enum-set" type="OpenNodeType"/>
+  <xs:element name="int" type="OpenNodeType"/>
+  <xs:element name="null" type="OpenNodeType"/>
+  <xs:element name="string" type="OpenNodeType"/>
+
+</xs:schema>
