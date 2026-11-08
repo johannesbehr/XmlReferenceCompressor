@@ -1,10 +1,13 @@
 # EXIficient benchmark
 
-This small Java benchmark runs schema-less EXI against .sng files in a ZIP archive.
+This Java benchmark compares:
 
-It measures original XML size, GZIP size, EXI bit-packed size, EXI compression-mode size, encode/decode times, and XML-tree round-trip verification.
+- GZIP (Java `GZIPOutputStream`)
+- EXI schema-less, BIT_PACKED
+- EXI schema-less, COMPRESSION
+- EXI schema-informed, COMPRESSION (when an XSD is supplied)
 
-The benchmark enables preservation of comments, processing instructions, namespace prefixes and lexical values. The supplied six-song sample contains none of those optional constructs, but keeping the options enabled makes the test configuration less specific to the current sample.
+It reads every `.sng` file from a ZIP archive, writes encoded EXI files, records encode/decode times, and checks that decoding reproduces the original XML tree.
 
 ## Requirements
 
@@ -14,24 +17,48 @@ The benchmark enables preservation of comments, processing instructions, namespa
 
 EXIficient 1.0.7 is used under its MIT license.
 
-## Run on Windows (PowerShell)
+## Build on Windows (PowerShell)
 
 From the repository root:
 
 ~~~powershell
 mvn -f benchmark/exi/pom.xml package dependency:copy-dependencies
-
-java -cp "benchmark/exi/target/classes;benchmark/exi/target/dependency/*" org.jjazzlab.exibench.ExiBenchmark "C:\path\to\test.zip" "benchmark/exi/results"
 ~~~
 
-The output directory contains results.csv and one .exi file per song and coding mode.
+## Run with the JJazzLab schema
 
-The benchmark does not modify the input ZIP or the original .sng files.
+From the repository root, run:
 
-## Important interpretation notes
+~~~powershell
+java -cp "benchmark/exi/target/classes;benchmark/exi/target/dependency/*" org.jjazzlab.exibench.ExiBenchmark ".\test.zip" "benchmark/exi/results" "benchmark/exi/schema/jjazzlab-sng.xsd"
+~~~
 
-- Both EXI modes are schema-less. No XSD is supplied.
-- The EXI stream includes its encoding options. This adds a small header cost but avoids relying on out-of-band knowledge of the chosen coding mode.
+Adjust the ZIP path if your test archive is stored elsewhere.
+
+The third argument is optional. Without it, the benchmark runs only the two schema-less EXI modes, as before.
+
+## Output
+
+The output directory contains:
+
+- `results.csv` – sizes, encode/decode times and round-trip status
+- `*.bit-packed.exi` – schema-less BIT_PACKED streams
+- `*.compression.exi` – schema-less COMPRESSION streams
+- `*.schema-compression.exi` – schema-informed COMPRESSION streams
+
+The CSV keeps the previous columns and appends:
+
+- `exi_schema_compression_bytes`
+- `schema_compression_encode_ms`
+- `schema_compression_decode_ms`
+- `schema_compression_roundtrip`
+
+## Interpretation notes
+
+- The schema-informed run uses `benchmark/exi/schema/jjazzlab-sng.xsd` for both encoding and decoding.
+- The XSD is **not** included in the EXI byte count. This models a receiver that already has the same schema installed. For a real deployment, the schema distribution/versioning cost and compatibility need to be considered separately.
+- The current XSD is deliberately permissive for nested JJazzLab model objects. It is an initial schema-informed EXI experiment, not a complete semantic validation schema for every JJazzLab release.
+- The EXI stream includes EXI options. The decoder also receives the same schema out-of-band.
 - The round-trip check compares parsed XML trees, not byte-for-byte serialization. XML declaration formatting, quote style and attribute order are not significant to that comparison.
-- GZIP is measured separately from EXI. EXI COMPRESSION already applies its own DEFLATE compression.
-- Schema-informed EXI is a separate experiment and should only be compared after we have a shared XSD and account for how that XSD is distributed.
+- EXI COMPRESSION already applies its own DEFLATE compression; do not gzip the EXI output again when comparing these numbers.
+- Timings are single-run measurements and should be treated as indicative only.
