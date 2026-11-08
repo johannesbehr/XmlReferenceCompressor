@@ -44,7 +44,7 @@
   </xs:complexType>
 
   <xs:element name="Song" type="SongType"/>
-  <xs:element name="org.jjazz.song.api.Song$SerializationProxy" type="SongType"/>
+  <!-- The Java serialization-proxy class name is not an XML element QName. -->
 
   <!-- Song/model vocabulary observed in public JJazzLab sources and .sng files. -->
   <xs:element name="spVERSION" type="OpenNodeType"/>
