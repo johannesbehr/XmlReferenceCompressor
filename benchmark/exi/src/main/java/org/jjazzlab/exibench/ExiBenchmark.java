@@ -7,6 +7,7 @@ import com.siemens.ct.exi.core.FidelityOptions;
 import com.siemens.ct.exi.core.helpers.DefaultEXIFactory;
 import com.siemens.ct.exi.main.api.sax.EXIResult;
 import com.siemens.ct.exi.main.api.sax.EXISource;
+import com.siemens.ct.exi.grammars.GrammarFactory;
 import org.xml.sax.InputSource;
 import org.xml.sax.XMLReader;
 import org.xml.sax.helpers.XMLReaderFactory;
@@ -32,13 +33,13 @@ import java.util.zip.ZipInputStream;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 
-/** Runs schema-less EXI encodings against every .sng file in a ZIP archive. */
+/** Runs schema-less and, optionally, schema-informed EXI encodings against .sng files in a ZIP archive. */
 public final class ExiBenchmark {
     private ExiBenchmark() {}
 
     private record ResultRow(String name, int originalBytes, int gzipBytes,
             int bitPackedBytes, long bitPackedEncodeMs, long bitPackedDecodeMs, boolean bitPackedRoundTrip,
-            int compressionBytes, long compressionEncodeMs, long compressionDecodeMs, boolean compressionRoundTrip) {}
+            int compressionBytes, long compressionEncodeMs, long compressionDecodeMs, boolean compressionRoundTrip,\n            int schemaCompressionBytes, long schemaCompressionEncodeMs, long schemaCompressionDecodeMs, boolean schemaCompressionRoundTrip) {}
 
     public static void main(String[] args) throws Exception {
         if (args.length < 1 || args.length > 2) {
@@ -56,7 +57,7 @@ public final class ExiBenchmark {
                 if (entry.isDirectory() || !entry.getName().toLowerCase(Locale.ROOT).endsWith(".sng")) continue;
                 byte[] xml = zip.readAllBytes();
                 String name = Path.of(entry.getName()).getFileName().toString();
-                ResultRow row = benchmarkOne(name, xml, outputDir);
+                ResultRow row = benchmarkOne(name, xml, outputDir, schemaPath);
                 rows.add(row);
                 System.out.printf(Locale.ROOT,
                         "%-28s XML %,8d | GZIP %,6d | EXI bit %,6d | EXI compression %,6d%n",
@@ -71,16 +72,16 @@ public final class ExiBenchmark {
         System.out.println("EXI files:  " + outputDir.toAbsolutePath());
     }
 
-    private static ResultRow benchmarkOne(String name, byte[] xml, Path outputDir) throws Exception {
+    private static ResultRow benchmarkOne(String name, byte[] xml, Path outputDir, Path schemaPath) throws Exception {
         int gzipBytes = gzip(xml).length;
         ModeResult bitPacked = encodeDecode(xml, CodingMode.BIT_PACKED);
-        ModeResult compression = encodeDecode(xml, CodingMode.COMPRESSION);
+        ModeResult compression = encodeDecode(xml, CodingMode.COMPRESSION, null);\n        ModeResult schemaCompression = schemaPath == null ? null : encodeDecode(xml, CodingMode.COMPRESSION, schemaPath);
         String safeName = name.replaceAll("[^A-Za-z0-9._-]", "_");
         Files.write(outputDir.resolve(safeName + ".bit-packed.exi"), bitPacked.encoded());
-        Files.write(outputDir.resolve(safeName + ".compression.exi"), compression.encoded());
+        Files.write(outputDir.resolve(safeName + ".compression.exi"), compression.encoded());\n        if (schemaCompression != null) Files.write(outputDir.resolve(safeName + ".schema-compression.exi"), schemaCompression.encoded());
         return new ResultRow(name, xml.length, gzipBytes,
                 bitPacked.encoded().length, bitPacked.encodeMs(), bitPacked.decodeMs(), bitPacked.roundTrip(),
-                compression.encoded().length, compression.encodeMs(), compression.decodeMs(), compression.roundTrip());
+                compression.encoded().length, compression.encodeMs(), compression.decodeMs(), compression.roundTrip(),\n                schemaCompression == null ? 0 : schemaCompression.encoded().length,\n                schemaCompression == null ? 0 : schemaCompression.encodeMs(),\n                schemaCompression == null ? 0 : schemaCompression.decodeMs(),\n                schemaCompression != null && schemaCompression.roundTrip());
     }
 
     private record ModeResult(byte[] encoded, long encodeMs, long decodeMs, boolean roundTrip) {}
